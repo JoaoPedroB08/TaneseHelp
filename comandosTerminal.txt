@@ -1,0 +1,45 @@
+instale django:
+    - pip install django
+
+Criar projeto:
+    - python -m django startproject config .
+
+Criar app:
+    - python manage.py startapp oficina
+
+Criar pasta templates:
+    - mkdir templates
+
+--------------------------------------------------
+
+Somente após modificar os arquivos:
+ - config/settings.py
+ - oficina/models.py
+
+faça:
+    - python manage.py makemigrations
+    - python manage.py migrate
+
+--------------------------------------------------
+
+Somente após alterar o arquivo:
+ - oficina/admin.py
+
+faça:
+    - python manage.py createsuperuser
+    (crie "admin" com gmail e senha sendo: "admin@gmail.com" e "123". Depois crie outro usuário a vontade)
+
+--------------------------------------------------
+
+Somente após terminar de alterar todos os arquivos do site:
+ - oficina.views.py
+ - config/urls.py
+ - templates/login.html
+ - templates/lista_caixas.html
+ - templates/nova_caixa.html
+ - templates/confirmar_exclusao.html
+ - templates/lista_ferramentas.html
+ - templates/nova_ferramenta.html
+
+Use no terminal:
+    - python manage.py runserver

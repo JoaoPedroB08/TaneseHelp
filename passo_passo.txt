@@ -1,0 +1,389 @@
+
+# esse passo a passo não está com o código finalizado, aproveire seu uso mais como uma memorização dos passos.
+
+# 1. Instalar Django
+pip install django
+
+# 2. Criar o Projeto (Não esqueça o ponto no final)
+python -m django startproject config .
+
+# 3. Criar o App da Oficina
+python manage.py startapp oficina
+
+# 4. Criar pasta de Templates
+mkdir templates
+
+----------------
+
+FASE 2: Configurações (settings.py)
+Abra o arquivo config/settings.py e altere apenas o necessário.
+
+1. Registre o App (Procure INSTALLED_APPS lá pela linha 33):
+
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'oficina', # <--- ADICIONE ISSO
+]
+
+---------------
+
+2. Configure a Pasta de Templates (Procure TEMPLATES lá pela linha 54):
+
+'DIRS': [BASE_DIR / 'templates'], # <--- ALTERE ISSO
+
+---------------
+
+3. Configure o Idioma (Final do arquivo):
+
+LANGUAGE_CODE = 'pt-br'
+TIME_ZONE = 'America/Sao_Paulo'
+
+---------------
+
+🗄️ FASE 3: Banco de Dados (models.py)
+Abra oficina/models.py.
+
+from django.db import models
+from django.contrib.auth.models import User
+
+class Caixa(models.Model):
+    dono = models.ForeignKey(User, on_delete=models.CASCADE)
+    identificacao = models.CharField(max_length=100)
+
+    def __str__(self):
+        return self.identificacao
+
+class Ferramenta(models.Model):
+    caixa = models.ForeignKey(Caixa, on_delete=models.PROTECT)
+    nome = models.CharField(max_length=100)
+    descricao = models.CharField(max_length=255) # Campo extra pedido
+
+    def __str__(self):
+        return self.nome
+
+---------------
+
+Volte ao Terminal:
+
+python manage.py makemigrations
+python manage.py migrate
+
+---------------
+
+👮 FASE 4: Usuários e Admin
+Vamos criar o Admin e o Cliente conforme sua regra de login.
+
+1. Configurar o Admin (oficina/admin.py):
+
+from django.contrib import admin
+from .models import Caixa, Ferramenta
+
+admin.site.register(Caixa)
+admin.site.register(Ferramenta)
+
+---------------
+
+2. Criar o ADMIN (Terminal):
+Este é o passo crucial para sua lógica de login funcionar.
+
+python manage.py createsuperuser
+# Username: admin
+# Email: admin@gmail.com  <--- OBRIGATÓRIO SER ESSE PARA FUNCIONAR SUA LÓGICA
+# Password: 123
+# Password (again): 123
+3. Criar o CLIENTE (Terminal):
+
+python manage.py createsuperuser
+# Username: cliente
+# Email: cliente@gmail.com
+# Password: 123
+
+---------------
+
+FASE 5: A Lógica (views.py)
+Abra oficina/views.py. Aqui está a mágica do login e as proteções.
+
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.db.models import ProtectedError
+from .models import Caixa, Ferramenta
+
+# --- LÓGICA DE LOGIN PERSONALIZADA ---
+def custom_login(request):
+    if request.method == 'POST':
+        # Pegamos os dados do HTML
+        email_input = request.POST.get('email') # O usuário digita o email/user aqui
+        senha_input = request.POST.get('senha')
+        
+        # Tentamos autenticar (O Django espera username, vamos passar o input ali)
+        user = authenticate(request, username=email_input, password=senha_input)
+        
+        if user is not None:
+            login(request, user)
+            # AQUI ESTÁ A LÓGICA QUE VOCÊ PEDIU:
+            if user.email == 'admin@gmail.com':
+                return redirect('/admin/') # Vai para o Django Admin
+            else:
+                return redirect('lista_caixas') # Cliente normal vai para o sistema
+        else:
+            return render(request, 'login.html', {'erro': 'Credenciais inválidas!'})
+            
+    return render(request, 'login.html')
+
+def fazer_logout(request):
+    logout(request)
+    return redirect('login')
+
+# --- SISTEMA DA OFICINA ---
+
+@login_required(login_url='login')
+def lista_caixas(request):
+    # Filtra apenas caixas do dono logado
+    caixas = Caixa.objects.filter(dono=request.user)
+    return render(request, 'lista_caixas.html', {'caixas': caixas})
+
+@login_required(login_url='login')
+def nova_caixa(request):
+    if request.method == 'POST':
+        identificacao = request.POST.get('identificacao')
+        Caixa.objects.create(dono=request.user, identificacao=identificacao)
+        return redirect('lista_caixas')
+    return render(request, 'nova_caixa.html')
+
+@login_required(login_url='login')
+def excluir_caixa(request, id):
+    caixa = get_object_or_404(Caixa, id=id)
+    if request.method == 'POST':
+        try:
+            caixa.delete()
+            return redirect('lista_caixas')
+        except ProtectedError:
+            return render(request, 'confirmar_exclusao.html', {
+                'caixa': caixa, 
+                'erro': 'ERRO CRÍTICO: Caixa contém ferramentas e não pode ser destruída.'
+            })
+    return render(request, 'confirmar_exclusao.html', {'caixa': caixa})
+
+@login_required(login_url='login')
+def lista_ferramentas(request, caixa_id):
+    caixa = get_object_or_404(Caixa, id=caixa_id)
+    ferramentas = Ferramenta.objects.filter(caixa=caixa)
+    return render(request, 'lista_ferramentas.html', {'caixa': caixa, 'ferramentas': ferramentas})
+
+@login_required(login_url='login')
+def nova_ferramenta(request, caixa_id):
+    caixa = get_object_or_404(Caixa, id=caixa_id)
+    if request.method == 'POST':
+        nome = request.POST.get('nome')
+        descricao = request.POST.get('descricao')
+        Ferramenta.objects.create(caixa=caixa, nome=nome, descricao=descricao)
+        return redirect('lista_ferramentas', caixa_id=caixa.id)
+    return render(request, 'nova_ferramenta.html', {'caixa': caixa})
+
+---------------
+
+FASE 6: Rotas (urls.py)
+Abra config/urls.py.
+
+from django.contrib import admin
+from django.urls import path
+from oficina import views
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    
+    # Login e Logout customizados
+    path('', views.custom_login, name='login'),
+    path('logout/', views.fazer_logout, name='logout'),
+
+    # Caixas
+    path('caixas/', views.lista_caixas, name='lista_caixas'),
+    path('caixas/nova/', views.nova_caixa, name='nova_caixa'),
+    path('caixas/excluir/<int:id>/', views.excluir_caixa, name='excluir_caixa'),
+
+    # Ferramentas
+    path('caixas/<int:caixa_id>/ferramentas/', views.lista_ferramentas, name='lista_ferramentas'),
+    path('caixas/<int:caixa_id>/ferramentas/nova/', views.nova_ferramenta, name='nova_ferramenta'),
+]
+----------------
+
+FASE 7: Templates (HTML Dark/Red)
+O ESTILO CSS (Cole no topo de TODOS os arquivos abaixo)
+
+<style>
+    body {
+        background-color: #121212;
+        color: #e0e0e0;
+        font-family: sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-top: 50px;
+    }
+    h1, h2 { color: #ff3b3b; text-transform: uppercase; letter-spacing: 2px; }
+    .card {
+        background: #1e1e1e;
+        padding: 30px;
+        border: 1px solid #333;
+        border-radius: 8px;
+        box-shadow: 0 0 20px rgba(255, 59, 59, 0.1);
+        width: 400px;
+        text-align: center;
+    }
+    input {
+        width: 90%;
+        padding: 10px;
+        margin: 10px 0;
+        background: #2c2c2c;
+        border: 1px solid #ff3b3b;
+        color: white;
+    }
+    button, .btn {
+        background: #b71c1c;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        cursor: pointer;
+        font-weight: bold;
+        text-decoration: none;
+        display: inline-block;
+        margin-top: 10px;
+    }
+    button:hover, .btn:hover { background: #ff3b3b; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th { background: #333; color: #ff3b3b; padding: 10px; }
+    td { border-bottom: 1px solid #333; padding: 10px; }
+    a { color: #ff6666; text-decoration: none; }
+    .erro { color: red; font-weight: bold; margin-bottom: 10px; }
+</style>
+
+----------------
+
+1. login.html (Com a label E-mail)
+
+<!-- Cole o estilo aqui -->
+<div class="card">
+    <h1>ACESSO RESTRITO</h1>
+    {% if erro %} <p class="erro">{{ erro }}</p> {% endif %}
+    
+    <form method="post">
+        {% csrf_token %}
+        <label>E-mail do Usuário</label>
+        <input type="text" name="email" placeholder="ex: admin@gmail.com">
+        
+        <label>Senha</label>
+        <input type="password" name="senha" placeholder="******">
+        
+        <button type="submit">ENTRAR</button>
+    </form>
+</div>
+
+----------------
+
+2. lista_caixas.html
+
+<!-- Cole o estilo aqui -->
+<div class="card" style="width: 600px;">
+    <h2>Minhas Caixas</h2>
+    <p>Usuário: {{ user.username }} | <a href="{% url 'logout' %}">Sair</a></p>
+    
+    <a href="{% url 'nova_caixa' %}" class="btn">Nova Caixa</a>
+
+    <table>
+        <tr><th>ID</th><th>Identificação</th><th>Ações</th></tr>
+        {% for caixa in caixas %}
+        <tr>
+            <td>{{ caixa.id }}</td>
+            <td>{{ caixa.identificacao }}</td>
+            <td>
+                <a href="{% url 'lista_ferramentas' caixa.id %}" class="btn">Abrir</a>
+                <a href="{% url 'excluir_caixa' caixa.id %}" style="color: red;">X</a>
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3">Nenhuma caixa encontrada.</td></tr>
+        {% endfor %}
+    </table>
+</div>
+
+----------------
+
+3. nova_caixa.html
+
+<!-- Cole o estilo aqui -->
+<div class="card">
+    <h2>Cadastrar Caixa</h2>
+    <form method="post">
+        {% csrf_token %}
+        <input type="text" name="identificacao" placeholder="Nome da Caixa (Ex: Elétrica)" required>
+        <button type="submit">Salvar</button>
+    </form>
+    <br>
+    <a href="{% url 'lista_caixas' %}">Cancelar</a>
+</div>
+
+
+4. confirmar_exclusao.html
+
+<!-- Cole o estilo aqui -->
+<div class="card">
+    <h2>⚠️ CONFIRMAÇÃO</h2>
+    {% if erro %}
+        <p class="erro">{{ erro }}</p>
+        <a href="{% url 'lista_caixas' %}" class="btn">Voltar</a>
+    {% else %}
+        <p>Deseja destruir a caixa <strong>{{ caixa.identificacao }}</strong>?</p>
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit">SIM, DESTRUIR</button>
+        </form>
+        <br>
+        <a href="{% url 'lista_caixas' %}">Cancelar</a>
+    {% endif %}
+</div>
+
+----------------
+
+5. lista_ferramentas.html
+
+<!-- Cole o estilo aqui -->
+<div class="card" style="width: 600px;">
+    <h2>Caixa: {{ caixa.identificacao }}</h2>
+    <a href="{% url 'nova_ferramenta' caixa.id %}" class="btn">Adicionar Ferramenta</a>
+    <a href="{% url 'lista_caixas' %}" class="btn" style="background: #333;">Voltar</a>
+
+    <table>
+        <tr><th>Ferramenta</th><th>Descrição</th></tr>
+        {% for ferr in ferramentas %}
+        <tr>
+            <td>{{ ferr.nome }}</td>
+            <td>{{ ferr.descricao }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2">Caixa vazia.</td></tr>
+        {% endfor %}
+    </table>
+</div>
+
+----------------
+
+6. nova_ferramenta.html
+
+<!-- Cole o estilo aqui -->
+<div class="card">
+    <h2>Nova Ferramenta</h2>
+    <form method="post">
+        {% csrf_token %}
+        <input type="text" name="nome" placeholder="Nome (Ex: Chave 12)" required>
+        <input type="text" name="descricao" placeholder="Descrição (Ex: Enferrujada)" required>
+        <button type="submit">Guardar</button>
+    </form>
+</div>
+
+finalize com: python manage.py runserver

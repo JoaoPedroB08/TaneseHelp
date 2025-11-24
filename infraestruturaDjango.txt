@@ -1,0 +1,21 @@
+LISTA DE REQUISITOS DE INFRAESTRUTURA
+
+1. SGBD (Sistema Gerenciador de Banco de Dados):
+    - SQLite 3 (versão padrão integrada a biblioteca do python e configurada pelo django em db.sqlite3)
+    - para visualizar db.sqlite3 instale: SQLite Viewer
+
+2. Servidor de Aplicação / Runtime:
+    - Interpretador: Python (Versão 3.10)
+    - Framework Web: Django (Versão 4.0)
+    - Servidor Web (Desenvolvimento): WSGI (runserver)
+
+3. Linguagem e Tecnologias:
+    - Backend: Python 3.
+    - Frontend: HTML5, CSS3, Django Template Language (DTL)
+    - Arquitetura: MTV, sever: SSR
+
+4. Dependências do Projeto (requirements.txt):
+    - django
+    - asgiref
+    - sqlparse 
+    - tzdata
